@@ -102,7 +102,14 @@ macro_rules! rpc_encode_decode {
                         $(let $field = DecodeMut::decode(r, s);)*
                         $name::$variant $(($field))*
                     })*
-                    _ => unreachable!(),
+                    t => unreachable!("could not decode with type {}: got {:?} - tags={:?}", stringify!($name), t, stringify!(
+                        match u8::decode(r, s) {
+                            $(tag::$variant => {
+                                $(let $field = DecodeMut::decode(r, s);)*
+                                $name::$variant $(($field))*
+                            })*
+                        }
+                    )),
                 }
             }
         }
