@@ -9,13 +9,53 @@ use crate::not_bash::{pushd, run};
 // Latest stable, feel free to send a PR if this lags behind.
 const REQUIRED_RUST_VERSION: u32 = 46;
 
+const CLIENT_OPTS: &[ClientOpt] =
+    &[ClientOpt::VsCode, ClientOpt::VsCodeInsiders, ClientOpt::VsCodium, ClientOpt::VsCodeOss];
+
 pub struct InstallCmd {
     pub client: Option<ClientOpt>,
     pub server: Option<ServerOpt>,
 }
 
+#[derive(Clone, Copy)]
 pub enum ClientOpt {
     VsCode,
+    VsCodeInsiders,
+    VsCodium,
+    VsCodeOss,
+    All,
+}
+
+impl ClientOpt {
+    pub const fn as_cmds(&self) -> &'static [&'static str] {
+        match self {
+            ClientOpt::VsCode => &["code"],
+            ClientOpt::VsCodeInsiders => &["code-insiders"],
+            ClientOpt::VsCodium => &["codium"],
+            ClientOpt::VsCodeOss => &["code-oss"],
+            ClientOpt::All => &["code", "code-insiders", "codium", "code-oss"],
+        }
+    }
+}
+
+impl Default for ClientOpt {
+    fn default() -> Self {
+        ClientOpt::VsCode
+    }
+}
+
+impl std::str::FromStr for ClientOpt {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        CLIENT_OPTS
+            .iter()
+            .copied()
+            .filter(|c| [s] == c.as_cmds())
+            .map(Result::Ok)
+            .next()
+            .unwrap_or_else(|| anyhow::bail!("no such client"))
+    }
 }
 
 pub struct ServerOpt {
@@ -33,6 +73,7 @@ impl InstallCmd {
             fix_path_for_mac().context("Fix path for mac")?
         }
         if let Some(server) = self.server {
+            println!("installing server");
             install_server(server).context("install server")?;
         }
         if let Some(client) = self.client {
@@ -75,17 +116,13 @@ fn fix_path_for_mac() -> Result<()> {
     Ok(())
 }
 
-fn install_client(ClientOpt::VsCode: ClientOpt) -> Result<()> {
+fn install_client(client_opt: ClientOpt) -> Result<()> {
     let _dir = pushd("./editors/code");
 
     let find_code = |f: fn(&str) -> bool| -> Result<&'static str> {
-        ["code", "code-insiders", "codium", "code-oss"]
-            .iter()
-            .copied()
-            .find(|bin| f(bin))
-            .ok_or_else(|| {
-                format_err!("Can't execute `code --version`. Perhaps it is not in $PATH?")
-            })
+        client_opt.as_cmds().iter().copied().find(|bin| f(bin)).ok_or_else(|| {
+            format_err!("Can't execute `code --version`. Perhaps it is not in $PATH?")
+        })
     };
 
     let installed_extensions = if cfg!(unix) {
